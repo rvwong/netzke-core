@@ -94,10 +94,20 @@ module Netzke::Core
 
         item_id = "#{component_name}#{params[:index]}"
 
+        puts "item_id = #{item_id}, component_name = #{component_name}"
+        puts "components = #{components.inspect}"
+        puts "components[component_name]=#{components[component_name].inspect}"
+        puts "components[component_name][:excluded]=#{components[component_name][:excluded]}"
+        puts "component_instance..=#{component_instance(component_name, {item_id: item_id, client_config: params[:client_config]})}"
+        puts "component_name=#{component_name}"
+        puts "client_config=#{params[:client_config]}"
+        puts "eagerly_loaded_components = #{eagerly_loaded_components.inspect}"
+
         cmp_instance = components[component_name] &&
           !components[component_name][:excluded] &&
           component_instance(component_name, {item_id: item_id, client_config: params[:client_config]})
 
+        puts "cmp_instance = #{cmp_instance.to_s}"
         if cmp_instance
           js, css = cmp_instance.js_missing_code(cache), cmp_instance.css_missing_code(cache)
           this.netzke_eval_js(js) if js.present?
@@ -125,15 +135,23 @@ module Netzke::Core
     # +params+ can contain:
     #   [client_config] a config hash passed from the client class
     #   [item_id] overridden item_id (used in case of multi-instance loading)
-    def component_instance(name, options = {})
-      return nil if !respond_to?("#{name}_component")
-
-      cfg = ComponentConfig.new(name, self)
-      cfg.client_config = options[:client_config] || {}
-      cfg.item_id = options[:item_id]
-      send("#{name}_component", cfg)
-      cfg.set_defaults!
-      cfg.klass.new(cfg, self)
+    #def component_instance(name, options = {})
+    #  return nil if !respond_to?("#{name}_component")
+    #  puts "creating component=#{name}"
+    #  cfg = ComponentConfig.new(name, self)
+    #  cfg.client_config = options[:client_config] || {}
+    #  cfg.item_id = options[:item_id]
+    #  send("#{name}_component", cfg)
+    #  cfg.set_defaults!
+    #  cfg.klass.new(cfg, self)
+    def component_instance(name, strong_config = {})
+      name.to_s.split('__').inject(self) do |out, cmp_name|
+        cmp_config = out.components[cmp_name.to_sym]
+        raise ArgumentError, "No component '#{cmp_name}' defined for '#{out.path}'" if cmp_config.nil? || cmp_config[:excluded]
+        cmp_config[:name] = cmp_name
+        cmp_config.merge!(strong_config)
+        cmp_config[:klass].new(cmp_config, out)
+      end
     end
 
     # @return [Array<Class>] All component classes that we depend on (used to render all necessary javascripts and stylesheets)
